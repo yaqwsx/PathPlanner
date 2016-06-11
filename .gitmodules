@@ -1,0 +1,6 @@
+[submodule "libs/docopt"]
+	path = libs/docopt
+	url = https://github.com/docopt/docopt.cpp.git
+[submodule "libs/atoms"]
+	path = libs/atoms
+	url = https://github.com/yaqwsx/atoms.git
