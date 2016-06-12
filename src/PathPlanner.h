@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <iostream>
 #include <vector>
 #include <array>
 #include <atoms/numeric/vector.h>
@@ -57,15 +58,19 @@ public:
         m_left_vel.back().y = 0;
         m_right_vel.back().y = 0;
 
-        for (int i = 0; i != 2; i++) {
+        for (int i = 0; i != 4; i++) {
             m_center_vel = smooth(m_center_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
             m_left_vel = smooth(m_left_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
             m_right_vel = smooth(m_right_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
 
-        m_center_vel = velocity_fix(m_center_vel, center_vel, 0.0001);
+        /*m_center_vel = velocity_fix(m_center_vel, center_vel, 0.0001);
         m_left_vel = velocity_fix(m_left_vel, left_vel, 0.0001);
-        m_right_vel = velocity_fix(m_right_vel, right_vel, 0.0001);
+        m_right_vel = velocity_fix(m_right_vel, right_vel, 0.0001);*/
+
+        auto diff = m_path[1] - m_path[0];
+        m_reconstructed = reconstruct(m_left_vel, m_right_vel, m_params.robot_width,
+            m_path.front(), atan2(diff.y, diff.x));
     }
 
     const Path& get_control_points() {
@@ -96,6 +101,10 @@ public:
         return m_right_vel;
     }
 
+    const Path& get_reconstructed() {
+        return m_reconstructed;
+    }
+
 private:
     Path m_control_points;
     Params m_params;
@@ -107,6 +116,8 @@ private:
     Path m_center_vel;
     Path m_left_vel;
     Path m_right_vel;
+
+    Path m_reconstructed;
 
     // Three split passes are issued to a trajectory. This routine calculates
     // split ratio for each pass based on initial segment count, max driving
@@ -250,6 +261,25 @@ private:
         }
 
         return smooth;
+    }
+
+    static Path reconstruct(const Path& left_vel, const Path& right_vel,
+        Double robot_width, Position initial, Double orient)
+    {
+        Double step = left_vel[1].x - left_vel[0].x;
+        Path res;
+        res.push_back(initial);
+        for (size_t i = 0; i != left_vel.size(); i++) {
+            Double v = (left_vel[i].y + right_vel[i].y) / 2;
+            Double w = (- left_vel[i].y + right_vel[i].y) / robot_width;
+
+            res.emplace_back(res.back().x + v * step * cos(orient),
+                             res.back().y + v * step * sin(orient));
+            /*res.emplace_back(res.back().x + v * (sin(orient + step * w) - sin(orient)) / w,
+                             res.back().y + v * (cos(orient) - cos(orient + step * w)) / w);*/
+            orient += w * step;
+        }
+        return res;
     }
 };
 

@@ -15,4 +15,5 @@ plot dir."control_points.txt" with linespoints title "Control points", \
      dir."trajectory_points.txt" with linespoints title "Trajectory", \
      dir."environment_points.txt" with lines lw 6 title "Environment", \
      dir."left_points.txt" with lines title "Left wheel", \
-     dir."right_points.txt" with lines title "Right wheel"
+     dir."right_points.txt" with lines title "Right wheel", \
+     dir."reconstructed_points.txt" with linespoints title "Reconstructed"

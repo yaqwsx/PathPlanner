@@ -20,9 +20,10 @@ R"(PathPlanner demo.
       --envir=<file>         Draws environment as XY plot
       --path_alpha=<coef>    Weight of control control_points
       --path_beta=<coef>     Weight of smoothness
-      --speed_alpha=<coef>    Weight of control control_points
-      --speed_beta=<coef>     Weight of smoothness
+      --speed_alpha=<coef>   Weight of control control_points
+      --speed_beta=<coef>    Weight of smoothness
       --robot_width=<width>  Robot width 
+      --time_step=<step>     Time step
 )";
 
 using Path = PathPlanner::Path;
@@ -63,6 +64,10 @@ PathPlanner::Params get_params(std::map<std::string, docopt::value>& args) {
         auto robot_width = args["--robot_width"];
         if (robot_width.isString())
             params.robot_width = std::stod(robot_width.asString());
+
+        auto time_step = args["--time_step"];
+        if (time_step.isString())
+            params.time_step = std::stod(time_step.asString());
     }
     catch(std::runtime_error& e) {
         throw std::runtime_error(std::string("Invalid values for parameters! ") + e.what());
@@ -120,6 +125,7 @@ int main(int argc, char** argv) {
             auto center_vel = open_out_file(output_dir + "velocity.txt");
             auto left_vel = open_out_file(output_dir + "left_velocity.txt");
             auto right_vel = open_out_file(output_dir + "right_velocity.txt");
+            auto recon = open_out_file(output_dir + "reconstructed_points.txt");
 
             gnuplot_output(*control_points, p.get_control_points());
             gnuplot_output(*trajectory, p.get_path());
@@ -128,6 +134,7 @@ int main(int argc, char** argv) {
             gnuplot_output(*center_vel, p.get_velocity());
             gnuplot_output(*left_vel, p.get_left_velocity());
             gnuplot_output(*right_vel, p.get_right_velocity());
+            gnuplot_output(*recon, p.get_reconstructed());
 
             auto environment_file = args["--envir"];
             Path environment;
