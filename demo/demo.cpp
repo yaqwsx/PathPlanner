@@ -16,14 +16,17 @@ R"(PathPlanner demo.
       pathplanner --version
 
     Options:
-      -h --help              Show this screen.
-      --envir=<file>         Draws environment as XY plot
-      --path_alpha=<coef>    Weight of control control_points
-      --path_beta=<coef>     Weight of smoothness
-      --speed_alpha=<coef>   Weight of control control_points
-      --speed_beta=<coef>    Weight of smoothness
-      --robot_width=<width>  Robot width 
-      --time_step=<step>     Time step
+      -h --help               Show this screen.
+      --envir=<file>          Draws environment as XY plot
+      --path_alpha=<coef>     Weight of control control_points
+      --path_beta=<coef>      Weight of smoothness
+      --speed_alpha=<coef>    Weight of control control_points
+      --speed_beta=<coef>     Weight of smoothness
+      --robot_width=<width>   Robot width 
+      --time_step=<step>      Time step
+      --max_speed=<x>         Max speed
+      --max_acceleration=<x>  Max acceleration
+      --dist_step=<x>         Smallest distance step
 )";
 
 using Path = PathPlanner::Path;
@@ -68,6 +71,18 @@ PathPlanner::Params get_params(std::map<std::string, docopt::value>& args) {
         auto time_step = args["--time_step"];
         if (time_step.isString())
             params.time_step = std::stod(time_step.asString());
+
+        auto max_speed = args["--max_speed"];
+        if (max_speed.isString())
+            params.max_speed = std::stod(max_speed.asString());
+
+        auto max_acceleration = args["--max_acceleration"];
+        if (max_acceleration.isString())
+            params.max_acceleration = std::stod(max_acceleration.asString());
+
+        auto dist_step = args["--dist_step"];
+        if (dist_step.isString())
+            params.dist_step = std::stod(dist_step.asString());
     }
     catch(std::runtime_error& e) {
         throw std::runtime_error(std::string("Invalid values for parameters! ") + e.what());

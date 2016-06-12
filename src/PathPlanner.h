@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 #include <array>
+#include <algorithm>
 #include <atoms/numeric/vector.h>
 
 namespace yaqwsx {
@@ -17,18 +18,20 @@ public:
 
     struct Params {
         Double time_step;
+        Double dist_step;
         Double path_alpha;
         Double path_beta;
         Double robot_width;
         Double speed_alpha;
         Double speed_beta;
+        Double max_speed;
+        Double max_acceleration;
+        unsigned traj_smooth_pass;
 
-        Params(Double time_step = 0.1, Double robot_width = 20,
-               Double path_alpha = 0.7, Double path_beta = 0.3,
-               Double speed_alpha = 0.1, Double speed_beta = 0.3)
-            : time_step(time_step), path_alpha(path_alpha), path_beta(path_beta),
-              robot_width(robot_width), speed_alpha(speed_alpha),
-              speed_beta(speed_beta)
+        Params()
+            : time_step(0.1), dist_step(2), path_alpha(0.7), path_beta(0.3),
+              robot_width(30), speed_alpha(0.1), speed_beta(0.3), max_speed(20),
+              max_acceleration(5), traj_smooth_pass(3)
         {}
     };
 
@@ -37,36 +40,29 @@ public:
     {}
 
     void compute() {
-        auto ratios = split_ratio(m_control_points.size(), 10, m_params.time_step);
+        double distance_step = m_params.dist_step;
         m_path = m_control_points;
-        for (int i : ratios) {
-            m_path = inject(m_path, i);
+        for (unsigned i = m_params.traj_smooth_pass; i != 0; i--) {
+            m_path = divide_by_steps(m_path, distance_step * i);
             m_path = smooth(m_path, m_params.path_alpha, m_params.path_beta, 0.001);
         }
 
-        left_right(m_params.robot_width);
-
-        auto center_vel = velocity(m_path, m_params.time_step);
-        auto left_vel = velocity(m_left, m_params.time_step);
-        auto right_vel = velocity(m_right, m_params.time_step);
-
-        m_center_vel = center_vel;
-        m_left_vel = left_vel;
-        m_right_vel = right_vel;
-
-        m_center_vel.back().y = 0;
-        m_left_vel.back().y = 0;
-        m_right_vel.back().y = 0;
-
-        for (int i = 0; i != 4; i++) {
-            m_center_vel = smooth(m_center_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
-            m_left_vel = smooth(m_left_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
-            m_right_vel = smooth(m_right_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
+        m_center_vel = speed(m_path, m_params.max_speed, m_params.max_acceleration,
+            m_params.robot_width, m_params.time_step);
+        m_center_vel = smooth(m_center_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
+        
+        m_path = path_to_steps(m_path, m_center_vel, m_params.time_step,
+            m_params.max_acceleration);
+        for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i ++) {
+            m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
 
-        /*m_center_vel = velocity_fix(m_center_vel, center_vel, 0.0001);
-        m_left_vel = velocity_fix(m_left_vel, left_vel, 0.0001);
-        m_right_vel = velocity_fix(m_right_vel, right_vel, 0.0001);*/
+        m_left = offset(m_path, m_params.robot_width / 2, true);
+        m_right = offset(m_path, m_params.robot_width / 2, false);
+
+        m_center_vel = velocity(m_path, m_params.time_step);
+        m_left_vel = velocity(m_left, m_params.time_step);
+        m_right_vel = velocity(m_right, m_params.time_step);
 
         auto diff = m_path[1] - m_path[0];
         m_reconstructed = reconstruct(m_left_vel, m_right_vel, m_params.robot_width,
@@ -119,54 +115,15 @@ private:
 
     Path m_reconstructed;
 
-    // Three split passes are issued to a trajectory. This routine calculates
-    // split ratio for each pass based on initial segment count, max driving
-    // time and a time step
-    static std::array<int, 3> split_ratio(Double seg_count, Double max_time,
-        Double step)
-    {
-        //return {3, 1, 1};
-        int first = 0, second = 0, third = 0;
-        int old_count = 0;
-        int max_count = max_time / step;
-        if (max_count < 100) {
-            int p_first = 0, p_total = 0;
-            for (int i = 4; i <= 6; i++) {
-                for (int j = 1; j <= 8; j++) {
-                    p_first = i * (seg_count - 1) + seg_count;
-                    p_total = j * (p_first - 1) + p_first;
-
-                    if (p_total <= max_count && p_total > old_count) {
-                        first = i;
-                        second = j;
-                        old_count = p_total;
-                    }
-                }
-            } 
+    static Path decimate(Path p, unsigned rate) {
+        size_t i = 0;
+        for (size_t j = 0; j < p.size(); j += rate, i++) {
+            p[i] = p[j];
         }
-        else {
-            int p_first = 0, p_second = 0, p_total = 0;
-            for(int i = 1; i < 5; i ++) {
-                for (int j = 1; j <= 8; j++) {
-                    for (int k = 1; k < 8; k++) {
-                        p_first = i * (seg_count - 1) + seg_count;
-                        p_second = j * (p_first - 1) + p_first;
-                        p_total = k * (p_second - 1) + p_second;
-                        if (p_total < max_count) {
-                            first = i;
-                            second = j;
-                            third = k;
-                        }
-                    }
-                }
-            }
-        }
-
-        return { first, second, third };
+        p.resize(i);
+        return p;
     }
 
-    // Creates new path by inserting num segments inside every segmnet of
-    // original path
     static Path inject(const Path& p, size_t num) {
         Path res;
         res.reserve(p.size() + num * (p.size() - 1));
@@ -177,6 +134,23 @@ private:
             for (size_t j = 1; j < num + 1; j++) {
                 res.push_back(j * (p[i + 1] - p[i]) / (num + 1) + p[i]);
             }
+        }
+        res.push_back(p.back());
+        return res;
+    }
+
+    static Path divide_by_steps(const Path& p, Double step) {
+        Path res;
+        Double pos = 0;
+        for (size_t i = 0; i < p.size() - 1; i++) {
+            auto dir = p[i + 1] - p[i];
+            Double len = dir.length();
+            dir /= len;
+            while(pos < len) {
+                res.push_back(p[i] + dir * pos);
+                pos += step;
+            }
+            pos -= len;
         }
         res.push_back(p.back());
         return res;
@@ -202,22 +176,106 @@ private:
         return res;
     }
 
-    void left_right(Double robot_width) {
+    static std::vector<Double> distances(const Path& p) {
+        std::vector<Double> res;
+        for (size_t i = 1; i < p.size() - 1; i++) {
+            res.push_back((p[i] - p[i-1]).length());
+        }
+        return res;
+    }
+
+    static std::vector<Double> distances_to_go(std::vector<Double> p) {
+        for(size_t i = p.size() - 2; i > 0; i--) {
+            p[i] += p[i + 1];
+        }
+        p[0] += p[1];
+        return p;
+    }
+
+    static Path offset(const Path& p, Double offset, bool left) {
         std::vector<Double> gradient;
-        for (size_t i = 0; i < m_path.size() - 1; i ++) {
-            auto diff = m_path[i + 1] - m_path[i];
+        for (size_t i = 0; i < p.size() - 1; i ++) {
+            auto diff = p[i + 1] - p[i];
             gradient.push_back(atan2(diff.y, diff.x));
         }
         gradient.push_back(gradient.back());
 
+        Path res;
+        Double rot = left ? (M_PI / 2.0) : (- M_PI / 2.0); 
         for (size_t i = 0; i < gradient.size(); i++) {
-            m_left.emplace_back(
-                robot_width / 2.0 * cos(gradient[i] + M_PI / 2.0) + m_path[i].x,
-                robot_width / 2.0 * sin(gradient[i] + M_PI / 2.0) + m_path[i].y);
-            m_right.emplace_back(
-                robot_width / 2.0 * cos(gradient[i] - M_PI / 2.0) + m_path[i].x,
-                robot_width / 2.0 * sin(gradient[i] - M_PI / 2.0) + m_path[i].y);
+            res.emplace_back(
+                offset * cos(gradient[i] + rot) + p[i].x,
+                offset * sin(gradient[i] + rot) + p[i].y);
         }
+        return res;
+    }
+
+    static Path speed(const Path& p, Double max_v, Double max_a,
+        Double width, Double time_step)
+    {
+        Path left = offset(p, width / 2.0, true);
+        Path right = offset(p, width / 2.0, false);
+        auto dist = distances(p);
+        auto left_dist = distances(left);
+        auto right_dist = distances(right);
+        auto to_go = distances_to_go(dist);
+        auto left_to_go = distances_to_go(left_dist);
+        auto right_to_go = distances_to_go(right_dist);
+
+        Path res;
+        Double left_v = 0, right_v = 0, v = 0, time = 0;
+        for (size_t i = 0; i != dist.size(); i++) {
+            Double l_limit = std::min({max_v, left_v + max_a * time, sqrt(2 * left_to_go[i] * max_a)});
+            Double r_limit = std::min({max_v, right_v + max_a * time, sqrt(2 * right_to_go[i] * max_a)});
+
+            Double candidate = std::min({max_v, v + max_a * time, sqrt(2 * to_go[i] * max_a)});
+
+            Double l_candidate = left_dist[i] / dist[i] * candidate;
+            Double r_candidate = right_dist[i] / dist[i] * candidate;
+            if (l_candidate > l_limit || r_candidate > r_limit) {
+                if (l_candidate > l_limit && r_candidate <= r_limit) {
+                    candidate = dist[i] / left_dist[i] * l_limit;
+                }
+                else if (l_candidate <= l_limit && r_candidate > r_limit) {
+                    candidate = dist[i] / right_dist[i] * r_limit;
+                }
+                else if (l_candidate < r_candidate) {
+                    candidate = dist[i] / left_dist[i] * l_limit;
+                }
+                else {
+                    candidate = dist[i] / right_dist[i] * r_limit;
+                }
+            }
+
+            res.emplace_back(i, candidate);
+            v = candidate <= 0 ? 0.1 : candidate;
+            time = (sqrt(2 * max_a * dist[i] + v * v) + v) / max_a / 5;
+            left_v = left_dist[i] / dist[i] * candidate;
+            right_v = right_dist[i] / dist[i] * candidate;
+        }
+        res.emplace_back(p.size(), 1);
+        return res;
+    }
+
+    Path path_to_steps(const Path& p, Path v, Double time_step, Double max_a) {
+        Path res;
+        auto dis = distances(p);
+
+        Double pos = 0;
+        for (size_t i = 0; i != p.size() - 1; i++) {
+            auto dir = p[i + 1] - p[i];
+            Double len = dir.length();
+            dir /= len;
+            while(pos < len) {
+                res.push_back(p[i] + dir * pos);
+                Double a = std::max(0.0, std::min(max_a, (v[i+1].y - v[i].y) / time_step));
+                pos += v[i].y * time_step + a * time_step * time_step / 2;
+                v[i].y += a * time_step;
+            }
+            pos -= len;
+        }
+
+        return res;
     }
 
     // Constructs a velocity from positions
@@ -230,37 +288,6 @@ private:
                              ((p[i] - p[i - 1]) / time_step).length());
         }
         return res;
-    }
-
-    static std::vector<Double> error_sum(const Path& orig, const Path& smooth) {
-        Double time_step = orig[1].x - orig[0].x;
-        std::vector<Double> res;
-        Double orig_d = orig[0].y;
-        Double smooth_d = smooth[0].y;
-
-        for (size_t i = 1; i < orig.size(); i++) {
-            orig_d = orig[i].y * time_step + orig_d;
-            smooth_d = smooth[i].y * time_step + smooth_d;
-
-            res.push_back(smooth_d - orig_d);
-        }
-
-        return res;
-    }
-
-    static Path velocity_fix(Path smooth, const Path& orig, Double tolerance) {
-        auto difference = error_sum(orig, smooth);
-
-        Double increase = 0;
-        while (fabs(difference.back()) > tolerance) {
-            increase = difference.back() / 50;
-            for (size_t i = 1; i < smooth.size() - 1; i++) 
-                smooth[i].y -= increase;
-
-            difference = error_sum(orig, smooth);
-        }
-
-        return smooth;
     }
 
     static Path reconstruct(const Path& left_vel, const Path& right_vel,
