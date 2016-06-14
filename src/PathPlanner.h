@@ -53,6 +53,7 @@ public:
         
         m_path = path_to_steps(m_path, m_center_vel, m_params.time_step,
             m_params.max_acceleration);
+
         for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i ++) {
             m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
@@ -101,6 +102,19 @@ public:
         return m_reconstructed;
     }
 
+    std::vector<std::pair<Double, Double>> left_right_dist() {
+        std::vector<std::pair<Double, Double>> res;
+        res.reserve(m_left.size() + 1);
+        res.push_back({0, 0});
+        for (size_t i = 1; i != m_left.size(); i++) {
+            auto prev = res.back();
+            res.push_back({prev.first + (m_left[i] - m_left[i - 1]).length(),
+                           prev.second + (m_right[i] - m_right[i - 1]).length() });
+        }
+
+        return res;
+    }
+
 private:
     Path m_control_points;
     Params m_params;
@@ -122,6 +136,16 @@ private:
         }
         p.resize(i);
         return p;
+    }
+
+    static Path inject(const Path& p) {
+        Path res;
+        for (size_t i = 0; i < p.size() - 1; i++) {
+            res.push_back(p[i]);
+            res.push_back((p[i] + p[i + 1]) / 2);
+        }
+        res.push_back(p.back());
+        return res;
     }
 
     static Path inject(const Path& p, size_t num) {
