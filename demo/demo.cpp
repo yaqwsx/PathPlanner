@@ -5,7 +5,7 @@
 #include <memory>
 #include <docopt/docopt.h>
 
-using yaqwsx::PathPlanner;
+using PathPlanner = yaqwsx::PathPlanner<int>;
 
 static const char usage[] =
 R"(PathPlanner demo.
@@ -40,7 +40,7 @@ Path load_trajectory(std::istream& i) {
     Path res;
     double x, y;
     while (i >> x >> y) {
-        res.emplace_back(x, y);
+        res.push_back(PathPlanner::Position::make_tagged(0, x, y));
     }
     return res;
 }
@@ -122,8 +122,12 @@ int main(int argc, char** argv) {
     try {
         auto ctrl_p = open_in_file(args["<trajectory>"].asString());
         Path traj = load_trajectory(*ctrl_p);
+        traj[traj.size() - 2].tag = 1;
+        traj.back().tag = 1;
+
         auto params = get_params(args);
-        PathPlanner p(traj, params);
+        PathPlanner p(params);
+        p.control_points() = traj;
         p.compute();
 
         // Output
@@ -142,7 +146,7 @@ int main(int argc, char** argv) {
             auto right_vel = open_out_file(output_dir + "right_velocity.txt");
             auto recon = open_out_file(output_dir + "reconstructed_points.txt");
 
-            gnuplot_output(*control_points, p.get_control_points());
+            gnuplot_output(*control_points, p.control_points());
             gnuplot_output(*trajectory, p.get_path());
             gnuplot_output(*left, p.get_left());
             gnuplot_output(*right, p.get_right());

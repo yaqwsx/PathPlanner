@@ -7,13 +7,16 @@
 #include <array>
 #include <algorithm>
 #include <atoms/numeric/vector.h>
+#include <atoms/type/tagged.h>
 
 namespace yaqwsx {
 
-template <class Double>
+template <class Double, class Tag = std::tuple<>>
 class PathPlannerBase {
 public:
-    using Position = atoms::Vector2D<Double>;
+    using Position = atoms::Tagged<atoms::Vector2D<Double>, Tag,
+                            atoms::KeepLeftMerge<Tag>>;
+    using WheelPosition = atoms::Tagged<std::pair<Double, Double>, Tag>;
     using Path = std::vector<Position>;
 
     struct Params {
@@ -35,9 +38,17 @@ public:
         {}
     };
 
-    PathPlannerBase(const Path& path, Params p = Params())
-        : m_control_points(path), m_params(p)
+    PathPlannerBase(Params p = Params())
+        : m_params(p)
     {}
+
+    void set_params(Params p) {
+        m_params = p;
+    }
+
+    Path& control_points() {
+        return m_control_points;
+    }
 
     void compute() {
         double distance_step = m_params.dist_step;
@@ -70,10 +81,6 @@ public:
             m_path.front(), atan2(diff.y, diff.x));
     }
 
-    const Path& get_control_points() {
-        return m_control_points;
-    }
-
     const Path& get_path() {
         return m_path;
     }
@@ -102,14 +109,15 @@ public:
         return m_reconstructed;
     }
 
-    std::vector<std::pair<Double, Double>> left_right_dist() {
-        std::vector<std::pair<Double, Double>> res;
+    std::vector<WheelPosition> left_right_dist() {
+        std::vector<WheelPosition> res;
         res.reserve(m_left.size() + 1);
         res.push_back({0, 0});
         for (size_t i = 1; i != m_left.size(); i++) {
             auto prev = res.back();
             res.push_back({prev.first + (m_left[i] - m_left[i - 1]).length(),
                            prev.second + (m_right[i] - m_right[i - 1]).length() });
+            res.back().tag = m_left[i].tag;
         }
 
         return res;
@@ -230,6 +238,7 @@ private:
             res.emplace_back(
                 offset * cos(gradient[i] + rot) + p[i].x,
                 offset * sin(gradient[i] + rot) + p[i].y);
+            res.back().tag = p[i].tag;
         }
         return res;
     }
@@ -334,7 +343,10 @@ private:
     }
 };
 
-using PathPlanner = PathPlannerBase<double>;
-using PathPlannerSingle = PathPlannerBase<double>;
+template <class Tag = std::tuple<>>
+using PathPlanner = PathPlannerBase<double, Tag>;
+
+template <class Tag = std::tuple<>>
+using PathPlannerSingle = PathPlannerBase<double, Tag>;
 
 } // namespace yaqwsx
