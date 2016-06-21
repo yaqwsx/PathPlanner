@@ -59,15 +59,19 @@ public:
         }
 
         m_center_vel = speed(m_path, m_params.max_speed, m_params.max_acceleration,
-            m_params.robot_width, m_params.time_step);
+            m_params.robot_width, m_params.time_step * 10);
         m_center_vel = smooth(m_center_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
         
-        m_path = path_to_steps(m_path, m_center_vel, m_params.time_step,
+        m_path = path_to_steps(m_path, m_center_vel, m_params.time_step * 10,
             m_params.max_acceleration);
 
         for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i ++) {
             m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
+	    m_path = inject(m_path, 9);
+	    for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i++) {
+		    m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
+	    }
 
         m_left = offset(m_path, m_params.robot_width / 2, true);
         m_right = offset(m_path, m_params.robot_width / 2, false);
@@ -164,7 +168,7 @@ private:
             res.push_back(p[i]);
 
             for (size_t j = 1; j < num + 1; j++) {
-                res.push_back(j * (p[i + 1] - p[i]) / (num + 1) + p[i]);
+                res.push_back((p[i + 1] - p[i]) * j / (num + 1) + p[i]);
             }
         }
         res.push_back(p.back());
