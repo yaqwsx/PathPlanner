@@ -51,7 +51,7 @@ public:
     }
 
     void compute() {
-        double distance_step = m_params.dist_step;
+        Double distance_step = m_params.dist_step;
         m_path = m_control_points;
         for (unsigned i = m_params.traj_smooth_pass; i != 0; i--) {
             m_path = divide_by_steps(m_path, distance_step * i);
@@ -69,8 +69,8 @@ public:
             m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
 	    m_path = inject(m_path, 9);
-	    for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i++) {
-		    m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
+	    for (unsigned i = 0; i != 9 * m_params.traj_smooth_pass; i++) {
+            m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
 	    }
 
         m_left = offset(m_path, m_params.robot_width / 2, true);
@@ -247,6 +247,13 @@ private:
         return res;
     }
 
+    static Double speed_limit(Double v, Double max_v, Double max_a, Double distance, Double distance_to_go) {
+        Double max_v_acc = sqrt(2 * distance * max_a + v * v);
+        Double max_v_decc = sqrt(2 * distance_to_go * max_a);
+
+        return std::min({max_v, max_v_acc, max_v_decc});
+    }
+
     static Path speed(const Path& p, Double max_v, Double max_a,
         Double width, Double time_step)
     {
@@ -260,12 +267,13 @@ private:
         auto right_to_go = distances_to_go(right_dist);
 
         Path res;
-        Double left_v = 0, right_v = 0, v = 0, time = 0;
+        Double left_v = 0, right_v = 0, v = 0;
+        res.emplace_back(0, 0);
         for (size_t i = 0; i != dist.size(); i++) {
-            Double l_limit = std::min({max_v, left_v + max_a * time, sqrt(2 * left_to_go[i] * max_a)});
-            Double r_limit = std::min({max_v, right_v + max_a * time, sqrt(2 * right_to_go[i] * max_a)});
+            Double l_limit = speed_limit(left_v, max_v, max_a, left_dist[i], left_to_go[i]);
+            Double r_limit = speed_limit(right_v, max_v, max_a, right_dist[i], right_to_go[i]);
 
-            Double candidate = std::min({max_v, v + max_a * time, sqrt(2 * to_go[i] * max_a)});
+            Double candidate = speed_limit(v, max_v, max_a, dist[i], to_go[i]);
 
             Double l_candidate = left_dist[i] / dist[i] * candidate;
             Double r_candidate = right_dist[i] / dist[i] * candidate;
@@ -284,13 +292,12 @@ private:
                 }
             }
 
-            res.emplace_back(i, candidate);
-            v = candidate <= 0 ? 0.1 : candidate;
-            time = (sqrt(2 * max_a * dist[i] + v * v) + v) / max_a / 5;
+            res.emplace_back(i + 1, candidate);
+            v = candidate;
             left_v = left_dist[i] / dist[i] * candidate;
             right_v = right_dist[i] / dist[i] * candidate;
         }
-        res.emplace_back(p.size(), 1);
+        res.emplace_back(p.size() + 1, 0);
         return res;
     }
 
@@ -298,6 +305,9 @@ private:
         Path res;
         auto dis = distances(p);
 
+        res.push_back(p.front());
+        res.push_back(p.front());
+        res.push_back(p.front());
         Double pos = 0;
         for (size_t i = 0; i != p.size() - 1; i++) {
             auto dir = p[i + 1] - p[i];
@@ -311,13 +321,17 @@ private:
             }
             pos -= len;
         }
+        res.push_back(p.back());
+        res.push_back(p.back());
+        res.push_back(p.back());
+        res.push_back(p.back());
 
         return res;
     }
 
     // Constructs a velocity from positions
     // Result contains two values - x is a time step, y is a speed
-    Path velocity(const Path& p, double time_step) {
+    Path velocity(const Path& p, Double time_step) {
         Path res;
         res.emplace_back(0, 0);
         for(size_t i = 1; i < p.size(); i++) {
@@ -351,6 +365,6 @@ template <class Tag = std::tuple<>>
 using PathPlanner = PathPlannerBase<double, Tag>;
 
 template <class Tag = std::tuple<>>
-using PathPlannerSingle = PathPlannerBase<double, Tag>;
+using PathPlannerSingle = PathPlannerBase<float, Tag>;
 
 } // namespace yaqwsx
