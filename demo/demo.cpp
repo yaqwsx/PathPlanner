@@ -141,6 +141,8 @@ int main(int argc, char** argv) {
         traj.back().tag = 1;
 
         auto params = get_params(args);
+
+        params.dump(std::cout);
         PathPlanner p(params);
         p.control_points() = traj;
         p.compute();

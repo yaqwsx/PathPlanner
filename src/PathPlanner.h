@@ -43,6 +43,21 @@ public:
               max_acceleration(5), final_acc_time(0.25), speed_step_mult(10),
               traj_smooth_pass(3)
         {}
+
+        void dump(std::ostream& o) {
+            o << "Trajectory params: {"
+              << "\ttime_step:        " << time_step << ",\n"
+              << "\tdist_step:        " << dist_step << ",\n"
+              << "\tpath_alpha:       " << path_alpha << ",\n"
+              << "\tpath_beta:        " << path_beta << ",\n"
+              << "\trobot_width:      " << robot_width << ",\n"
+              << "\tspeed_alpha:      " << speed_alpha << ",\n"
+              << "\tspeed_beta:       " << speed_beta << ",\n"
+              << "\tmax_acceleration: " << max_acceleration << ",\n"
+              << "\tfinal_acc_time:   " << final_acc_time << ",\n"
+              << "\tspeed_step_mult:  " << speed_step_mult << ",\n"
+              << "\ttraj_smooth_pass: " << traj_smooth_pass << "\n}\n";
+        }
     };
 
     PathPlannerBase(Params p = Params())
