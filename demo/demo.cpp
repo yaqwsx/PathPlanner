@@ -27,6 +27,9 @@ R"(PathPlanner demo.
       --max_speed=<x>         Max speed
       --max_acceleration=<x>  Max acceleration
       --dist_step=<x>         Smallest distance step
+      --speed_step_mult=<n>   Each n-th step speed limits are calculated
+      --final_acc=<x>         Soft start and stop take x seconds
+      --smooth_pass=<n>       n smooth passes are applied to trajectory
 )";
 
 using Path = PathPlanner::Path;
@@ -83,6 +86,18 @@ PathPlanner::Params get_params(std::map<std::string, docopt::value>& args) {
         auto dist_step = args["--dist_step"];
         if (dist_step.isString())
             params.dist_step = std::stod(dist_step.asString());
+
+        auto speed_step_mul = args["--speed_step_mult"];
+        if (speed_step_mul.isString())
+            params.speed_step_mult = std::stod(speed_step_mul.asString());
+
+        auto final_acc = args["--final_acc"];
+        if (final_acc.isString())
+            params.final_acc_time = std::stod(final_acc.asString());
+
+        auto smooth_pass = args["--smooth_pass"];
+        if (smooth_pass.isString())
+            params.traj_smooth_pass = std::stoi(smooth_pass.asString());
     }
     catch(std::runtime_error& e) {
         throw std::runtime_error(std::string("Invalid values for parameters! ") + e.what());

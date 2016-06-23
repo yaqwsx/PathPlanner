@@ -11,6 +11,9 @@
 
 namespace yaqwsx {
 
+// Plans a smooth trajectory for 2 wheeled robot among control points
+// Double = base type for calculations
+// Tag = additional information asociated with each control point segment
 template <class Double, class Tag = std::tuple<>>
 class PathPlannerBase {
 public:
@@ -19,22 +22,26 @@ public:
     using WheelPosition = atoms::Tagged<std::pair<Double, Double>, Tag>;
     using Path = std::vector<Position>;
 
+    // Path planning parameters, default values are provided
     struct Params {
-        Double time_step;
-        Double dist_step;
-        Double path_alpha;
-        Double path_beta;
-        Double robot_width;
-        Double speed_alpha;
-        Double speed_beta;
-        Double max_speed;
-        Double max_acceleration;
-        unsigned traj_smooth_pass;
+        Double time_step;          // Time steps of the robot - point each step
+        Double dist_step;          // Granularity of path shape generation
+        Double path_alpha;         // <0;1> - "stick to control points" ratio
+        Double path_beta;          // <0;1> - "feel free to go away from control poitns"
+        Double robot_width;        // Width of the robot wheels
+        Double speed_alpha;        // <0;1> amount of a precision speed follows hard limits with
+        Double speed_beta;         // <0;1> how rounded will the speed be?
+        Double max_speed;          // Hard limit on robot speed (including wheels)
+        Double max_acceleration;   // Hard limit on acceleration (including wheels)
+        Double final_acc_time;     // Length of "soft start and end" (reduces initial jerk)
+        unsigned speed_step_mult;  // Each speed_step_mult point is speed limit calculated
+        unsigned traj_smooth_pass; // Number of smooth passes on trajecotry
 
         Params()
             : time_step(0.1), dist_step(2), path_alpha(0.7), path_beta(0.3),
               robot_width(30), speed_alpha(0.1), speed_beta(0.3), max_speed(20),
-              max_acceleration(5), traj_smooth_pass(3)
+              max_acceleration(5), final_acc_time(0.25), speed_step_mult(10),
+              traj_smooth_pass(3)
         {}
     };
 
@@ -63,13 +70,13 @@ public:
         m_center_vel = smooth(m_center_vel, m_params.speed_alpha, m_params.speed_beta, 0.001);
         
         m_path = path_to_steps(m_path, m_center_vel, m_params.time_step * 10,
-            m_params.max_acceleration);
+            m_params.final_acc_time, m_params.max_acceleration);
 
         for (unsigned i = 0; i != m_params.traj_smooth_pass - 1; i ++) {
             m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
         }
-	    m_path = inject(m_path, 9);
-	    for (unsigned i = 0; i != 9 * m_params.traj_smooth_pass; i++) {
+	    m_path = inject(m_path, m_params.speed_step_mult - 1);
+	    for (unsigned i = 0; i != (m_params.speed_step_mult - 1) * m_params.traj_smooth_pass; i++) {
             m_path = smooth(m_path, m_params.speed_alpha, m_params.speed_beta, 0.001);
 	    }
 
@@ -301,13 +308,15 @@ private:
         return res;
     }
 
-    Path path_to_steps(const Path& p, Path v, Double time_step, Double max_a) {
+    Path path_to_steps(const Path& p, Path v, Double time_step, Double acc_time,
+        Double max_a)
+    {
         Path res;
         auto dis = distances(p);
 
-        res.push_back(p.front());
-        res.push_back(p.front());
-        res.push_back(p.front());
+        for (Double i = 0; i <= acc_time; i += time_step)
+            res.push_back(p.front());
+
         Double pos = 0;
         for (size_t i = 0; i != p.size() - 1; i++) {
             auto dir = p[i + 1] - p[i];
@@ -321,10 +330,9 @@ private:
             }
             pos -= len;
         }
-        res.push_back(p.back());
-        res.push_back(p.back());
-        res.push_back(p.back());
-        res.push_back(p.back());
+        
+        for (Double i = 0; i <= acc_time; i += time_step)
+            res.push_back(p.back());
 
         return res;
     }
