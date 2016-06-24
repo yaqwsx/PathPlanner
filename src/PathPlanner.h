@@ -360,6 +360,7 @@ private:
         for(size_t i = 1; i < p.size(); i++) {
             res.emplace_back(res.back().x + time_step,
                              ((p[i] - p[i - 1]) / time_step).length());
+	        res.back().tag = p[i].tag;
         }
         return res;
     }
