@@ -135,7 +135,7 @@ public:
         return m_reconstructed;
     }
 
-    std::vector<WheelPosition> left_right_dist() {
+    std::vector<WheelPosition> get_wheel_positions() {
         std::vector<WheelPosition> res;
         res.reserve(m_left.size() + 1);
         res.push_back({0, 0});
